@@ -8,6 +8,8 @@
 
 from __future__ import unicode_literals
 
+from docutils.nodes import description
+
 from . import configs
 from . import parse
 from . import utils
@@ -3379,15 +3381,16 @@ class ExhaleRoot(object):
 
             try:
                 with codecs.open(f.file_name, "w", "utf-8") as gen_file:
+                    gen_file_text = ""
                     # Add the metadata if they requested it
                     if configs.pageLevelConfigMeta:
-                        gen_file.write("{0}\n\n".format(configs.pageLevelConfigMeta))
+                        gen_file_text += "{0}\n\n".format(configs.pageLevelConfigMeta)
 
                     # generate a link label for every generated file
                     link_declaration = ".. _{0}:".format(f.link_name)
                     # every generated file must have a header for sphinx to be happy
                     f.title = "{0} {1}".format(utils.qualifyKind(f.kind), f.name)
-                    gen_file.write(textwrap.dedent('''
+                    gen_file_text += textwrap.dedent('''
                         {link}
 
                         {heading}
@@ -3399,31 +3402,35 @@ class ExhaleRoot(object):
                             f.title,
                             configs.SECTION_HEADING_CHAR
                         )
-                    )))
+                    ))
 
                     if f.parent and f.parent.kind == "dir":
-                        gen_file.write(textwrap.dedent('''
+                        gen_file_text += textwrap.dedent('''
                             |exhale_lsh| :ref:`Parent directory <{parent_link}>` (``{parent_name}``)
 
                             .. |exhale_lsh| unicode:: U+021B0 .. UPWARDS ARROW WITH TIP LEFTWARDS
 
                         '''.format(  # NOTE: newline required at end (#171)
                             parent_link=f.parent.link_name, parent_name=f.parent.name
-                        )))
+                        ))
 
                     brief, detailed = parse.getBriefAndDetailedRST(self, f)
                     if brief:
-                        gen_file.write("\n{brief}\n".format(brief=brief))
+                        specifications = "\n   ".join(
+                            spec for spec in utils.specificationsForKind(f.kind) if ":project:" in spec
+                        )
+                        gen_file_text += f"\n.. doxygenfile:: {f.name}\n   {specifications}\n   :sections: briefdescription\n\n"
+                        if detailed:
+                            gen_file_text += f"\nDetailed Description\n--------------------\n.. doxygenfile:: {f.name}\n   {specifications}\n   :sections: detaileddescription\n\n"
 
                     # include the contents directive if requested
                     contents = utils.contentsDirectiveOrNone(f.kind)
                     if contents:
-                        gen_file.write(contents)
+                        gen_file_text += contents
 
-                    gen_file.write(textwrap.dedent('''
+
+                    gen_file_text += textwrap.dedent('''
                         {definition}
-
-                        {detailed}
 
                         {includes}
 
@@ -3432,11 +3439,12 @@ class ExhaleRoot(object):
                         {children}
                     '''.format(
                         definition=file_definition,
-                        detailed=detailed,
                         includes=file_includes,
                         includeby=file_included_by,
                         children=children_string
-                    )).lstrip())
+                    )).lstrip()
+
+                    gen_file.write(gen_file_text)
             except:
                 utils.fancyError(
                     "Critical error while generating the file for [{0}]".format(f.file_name)
@@ -3623,13 +3631,13 @@ class ExhaleRoot(object):
                     generated_index.write(".. include:: {0}\n\n".format(
                         os.path.basename(self.page_hierarchy_file)
                     ))
-                if os.path.exists(self.class_hierarchy_file):
-                    generated_index.write(".. include:: {0}\n\n".format(
-                        os.path.basename(self.class_hierarchy_file)
-                    ))
                 if os.path.exists(self.file_hierarchy_file):
                     generated_index.write(".. include:: {0}\n\n".format(
                         os.path.basename(self.file_hierarchy_file)
+                    ))
+                if os.path.exists(self.class_hierarchy_file):
+                    generated_index.write(".. include:: {0}\n\n".format(
+                        os.path.basename(self.class_hierarchy_file)
                     ))
 
                 # Add the afterHierarchyDescription if provided
